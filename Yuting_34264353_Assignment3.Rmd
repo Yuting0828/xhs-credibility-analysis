@@ -1,0 +1,339 @@
+---
+title: 'Yuting_34264353_Assignment3'
+author: "Yuting Wang"
+date: "2025-05-18"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 3
+    theme: cosmo
+    highlight: tango
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+1. Introduction
+
+This report investigates the credibility of user-generated content (UGC) on the Xiaohongshu platform, focusing on inconsistencies between text and image content, abnormal user interactions, and linguistic indicators of potential misinformation. A dataset containing user posts from Xiaohongshu was analyzed using R-based techniques to generate quantitative and visual insights.
+
+```{R}
+# 1. Environment initialization
+rm(list = ls(all.names = TRUE))
+gc()
+```
+
+```{R}
+# 2. Load necessary packages
+required_pkgs <- c("readxl", "tidyverse", "wordcloud2", "ggplot2", "htmlwidgets", "skimr")
+invisible(lapply(required_pkgs, function(pkg){
+  if(!require(pkg, character.only=TRUE)){
+    install.packages(pkg)
+    library(pkg, character.only=TRUE)
+  }
+}))
+```
+
+```{R}
+# 3.Data loading
+library(readxl)
+xhs_data <- read.csv("xiaohongshu_data.csv")  
+```
+
+```{R}
+# 3.1 Data Quality Reporting Function
+generate_data_quality_report <- function(data){
+  cat("=== Data Quality Reporting Function ===\n")
+  
+  # Missing value statistics
+  na_stats <- sapply(data, function(x) sum(is.na(x)))
+  cat("\n[Missing value statistics]\n")
+  print(data.frame(
+    Field = names(na_stats),
+    Missing_Count = na_stats,
+    Missing_Percent = round(na_stats/nrow(data)*100, 2)
+  ))
+  
+  # Image coverage rate
+  if("image_url" %in% names(data)){
+    img_coverage <- sum(!is.na(data$image_url) & data$image_url != "")/nrow(data)
+    cat(sprintf("\n[Image coverage rate] %.2f%%\n", img_coverage*100))
+  }
+  
+  # Label validity analysis
+  if("tags" %in% names(data)){
+    valid_tags <- sum(!is.na(data$tags) & data$tags != "" & !grepl("^\\[\\]$", data$tags))
+    cat(sprintf("\n[Effective label ratio] %.2f%%\n", valid_tags/nrow(data)*100))
+  }
+  
+  # Distribution of numerical fields
+  num_cols <- sapply(data, is.numeric)
+  if(any(num_cols)){
+    cat("\n[Numerical field statistics]\n")
+    print(skimr::skim(data[, num_cols]))
+  }
+}
+```
+
+We assessed missing values, label validity, and image coverage. While most fields are complete, a proportion of records lack images or valid tags. These quality insights provide a foundation for anomaly detection.
+
+The following chart shows interaction anomalies (e.g., high saves with zero likes):
+```{R}
+# Execution Quality Report
+generate_data_quality_report(xhs_data)
+detect_engagement_anomalies <- function(data) {
+  data %>%
+    mutate(
+      # Mark two types of abnormal records
+      anomaly_type = case_when(
+        like_count == 0 & collect_count >= 100 ~ "Zero likes, high favorites",
+        comments_count == 0 & like_count >= 100 ~ "Zero comments, high likes"
+      )
+    ) %>%
+    filter(!is.na(anomaly_type)) %>%
+    group_by(anomaly_type) %>%
+    summarise(
+      count = n(),
+      percent = round(n()/nrow(data)*100, 2)
+    )
+}
+```
+
+```{R}
+# Calculate abnormal distribution
+visualize_anomalies <- function(anomaly_stats) {
+  ggplot(anomaly_stats, aes(x=anomaly_type, y=count, fill=anomaly_type)) +
+    geom_col() +
+    geom_text(aes(label=paste0(count," (",percent,"%)")), vjust=-0.5) +
+    labs(title="Abnormal distribution of interactive data on Xiaohongshu", 
+         x="Exception", y="Record quantity") +
+    theme_minimal()
+}
+```
+
+```{R}
+anomaly_results <- detect_engagement_anomalies(xhs_data)
+anomaly_plot <- visualize_anomalies(anomaly_results)
+```
+
+```{R}
+# 4. Data preprocessing
+xhs_clean <- xhs_data %>%
+  mutate(tags = gsub("\\[|\\]", "", tags)) %>%
+  filter(!is.na(tags) & tags != "" & tags != "NA")
+```
+
+3. Label Analysis
+
+Tags were cleaned, split, and aggregated. The top 20 frequent tags and a word cloud are shown below:
+
+```{R}
+# 5. Label analysis
+# Top 20 bar chart already printed in the block
+tags_df <- xhs_clean %>%
+  separate_rows(tags, sep = "[,，]") %>%
+  mutate(tags = str_trim(tags)) %>%
+  filter(nchar(tags) > 1) %>%
+  count(tags, sort = TRUE, name = "freq")
+```
+
+```{R}
+# 6. visual output
+if(nrow(tags_df) > 0){
+  # 6.1 Top20 Label distribution plot
+  top_tags <- head(tags_df, 20)
+  print(
+    ggplot(top_tags, aes(x = reorder(tags, freq), y = freq)) +
+      geom_col(fill = "#FF2442", width = 0.7) +
+      geom_text(aes(label = freq), hjust = -0.2, size = 3) +
+      coord_flip() +
+      labs(title = "xiaohongshu Top20 effective label distribution", 
+           x = "Label", y = "Frequency of occurrence") +
+      theme_minimal() +
+      theme(plot.title = element_text(face = "bold"))
+  )
+  # 6.2 Word cloud output
+  # Word cloud printed in code block above
+  wc <- wordcloud2(tags_df, 
+                   size = 0.8,
+                   color = colorRampPalette(c("#FF2442", "#FFB6C1"))(20),
+                   backgroundColor = "white")
+  print(wc)
+}
+```
+
+The original dataset contains Chinese tags extracted from Xiaohongshu posts. 
+To improve accessibility for non-Chinese-speaking professors and classmates, we translate the top 20 most frequent tags into English. These English labels are used in the following bar chart and word cloud, to enhance clarity and make the analysis results more interpretable for an international academic audience.
+```{R}
+# View the actual top 20 Chinese tags
+top_tags <- head(tags_df, 20)
+unique(top_tags$tags)  # You can run this in Console to see which tags are there
+```
+
+```{R}
+# Define label_map based on actual tags (only translate the actual top20 that appears)
+label_map <- c(
+  "减肥" = "Weight Loss",
+  "穿搭技巧" = "Outfit Tips",
+  "好物分享" = "Product Recommendations",
+  "减肥产品" = "Weight Loss Products",
+  "护肤" = "Skincare",
+  "穿搭干货" = "Styling Essentials",
+  "增强技巧" = "Enhancement Tips",
+  "提升衣品" = "Fashion Improvement",
+  "减肥药" = "Weight Loss Pills",
+  "医美" = "Aesthetic Medicine",
+  "穿搭" = "Outfit Ideas",
+  "购物分享" = "Shopping Tips",
+  "爱用物分享" = "Personal Favorites",
+  "平价实用好物分享" = "Affordable Product Recommendations",
+  "每日穿搭" = "Daily Outfits",
+  "穿搭底层逻辑" = "Outfit Logic",
+  "一起变瘦变美吧" = "Let's Get Slim and Beautiful",
+  "微商减肥产品" = "MLM Weight Loss Products",
+  "求推荐减肥产品" = "Recommend Weight Loss Products",
+  "护肤分享" = "Skincare Tips"
+)
+```
+
+```{R}
+# Generate an English bar chart
+top_tags_en <- top_tags %>%
+  mutate(tag_en = ifelse(tags %in% names(label_map), label_map[tags], tags))
+
+ggplot(top_tags_en, aes(x = reorder(tag_en, freq), y = freq)) +
+  geom_col(fill = "#FF2442", width = 0.7) +
+  geom_text(aes(label = freq), hjust = -0.2, size = 3) +
+  coord_flip() +
+  labs(
+    title = "Top 20 Effective Labels on Xiaohongshu",
+    x = "Label",
+    y = "Frequency of Occurrence"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold"),
+    axis.text.y = element_text(family = "Arial")
+  )
+```
+
+```{R}
+# Generate English word cloud (map all tags_df)
+tags_df_en <- tags_df %>%
+  mutate(word = ifelse(tags %in% names(label_map), label_map[tags], tags)) %>%
+  select(word, freq)  # Make sure it is the English name and frequency column, and the order is correct
+
+# Draw English word cloud
+wordcloud2(tags_df_en,
+           size = 0.8,
+           color = colorRampPalette(c("#FF2442", "#FFB6C1"))(20),
+           backgroundColor = "white")
+```
+
+4. Credibility Analysis
+
+We scored content credibility using heuristics such as:
+	•	Exaggerated language or punctuation (e.g., “100% effective”, “!!!”);
+	•	Mismatch between text and image count;
+	•	Presence of sensitive phrases (e.g., “verification code”).
+```{R}
+# Content credibility analysis function
+analyze_credibility <- function(data) {
+  # 1. Analysis of Image Text Matching Degree
+  data <- data %>%
+    mutate(
+      # Calculate text length and number of images
+      text_length = nchar(content),
+      image_count = ifelse(is.na(image_urls) | image_urls == "", 0, 
+                           str_count(image_urls, ",") + 1),
+      
+      # Image and text do not match the indicators
+      text_image_mismatch = case_when(
+        text_length > 300 & image_count < 1 ~ "Long text without image",
+        text_length < 50 & image_count > 3 ~ "Short text with multiple images",
+        grepl("美食|穿搭", title) & image_count < 1 ~ "Theme missing image",
+        TRUE ~ "normal"
+      ),
+      
+      # 2. Reliability indicators
+      credibility_score = case_when(
+        grepl("免费|领取|福利", content) ~ 0.3,
+        grepl("最|绝对|100%", content) ~ 0.5,
+        text_length/image_count < 30 ~ 0.4,
+        TRUE ~ 0.8
+      ),
+      
+      # 3. Fake features
+      fake_features = case_when(
+        grepl("\\d{6}|Verification code", content) ~ "Contains sensitive numbers",
+        str_count(content, "!") > 3 ~ "Excessive use of exclamation marks",
+        text_length > 1000 & image_count == 0 ~ "Long text without image",
+        TRUE ~ "normal"
+      )
+    )
+  
+  # Generate analysis report
+  list(
+    mismatch_stats = count(data, text_image_mismatch),
+    credibility_dist = quantile(data$credibility_score),
+    fake_features_dist = count(data, fake_features),
+    suspicious_samples = filter(data, credibility_score < 0.5) %>% 
+      select(title, content, image_urls, credibility_score)
+  )
+}
+result <- analyze_credibility(xhs_data)  # Transfer to the Xiaohongshu dataset
+View(result)  
+```
+
+4.2 Credibility Score Distribution
+The distribution of credibility scores among flagged content is shown:
+```{R}
+# Visualize the distribution of suspicious content
+visualize_analysis <- function(result) {
+  p1 <- ggplot(result$mismatch_stats, 
+               aes(x = reorder(text_image_mismatch, n), y = n)) +
+    geom_col(fill = "#FF2442") +
+    coord_flip() +
+    labs(title = "Distribution of inconsistent types of graphics and text", x = "Exception", y = "number")
+  
+  p2 <- ggplot(result$suspicious_samples, 
+               aes(x = credibility_score)) +
+    geom_histogram(binwidth = 0.1, fill = "#FFB6C1") +
+    labs(title = "Distribution of credibility of suspicious content", x = "Credibility rating", y = "number")
+  
+  p3 <- ggplot(result$fake_features_dist, 
+               aes(x = reorder(fake_features, n), y = n)) +
+    geom_col(fill = "#FF8C00") +
+    coord_flip() +
+    labs(title = "Distribution of fraudulent characteristics", x = "Feature Type", y = "number")
+  
+  list(mismatch_plot = p1, credibility_plot = p2, fake_feature_plot = p3)
+}
+plots <- visualize_analysis(result)
+```
+
+5. Fraudulent Feature Detection
+We analyzed suspicious patterns such as:
+	•	Sensitive codes (e.g., six-digit strings),
+	•	Overuse of punctuation,
+	•	Long-form content without imagery.
+```{R}
+# view charts
+print(plots$mismatch_plot)
+print(plots$credibility_plot)
+print(plots$fake_feature_plot)
+
+credibility_report <- analyze_credibility(xhs_data)
+```
+6. Conclusion and Recommendations
+
+The results reveal frequent credibility issues in Xiaohongshu content, driven by promotional exaggeration and text-image mismatches. The rule-based scoring system offers interpretable early warnings for content moderation.
+
+Recommendations:
+	•	Integrate real-time credibility scoring;
+	•	Flag interaction anomalies for moderation;
+	•	Require better alignment between visuals and captions;
+	•	Educate creators and users on quality standards.
+
+Future expansion may involve neural network models like CLIP or SimCLIP for scalable multimodal detection.
