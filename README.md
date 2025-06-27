@@ -71,7 +71,6 @@ Tools: Gensim, BERTopic, seaborn
 - Migrate to a Python framework;
 - Apply multimodal LLM;
 - Conduct modeling on real social platform data;
-- Write a thesis under the guidance of a mentor as the foundation for a PhD application.
 
 ---
 
@@ -79,7 +78,7 @@ Tools: Gensim, BERTopic, seaborn
 
 - The R language implementation is a simplified version;
 - Advanced NLP/NLU models are not implemented;
-- Please refer to `Assignment3_report.pdf` for the original output.
+- Please refer to `Yuting_34264353_Assignment3_report.pdf` for the original output.
 
 ---
 
