@@ -85,7 +85,7 @@ Tools: Gensim, BERTopic, seaborn
 
 ### Attachments
 
-- `Yuting_report.pdf`: Original analysis report  
-- `Yuting.Rmd`: Original assignment code  
+- `Yuting_34264353_Assignment3_report.pdf`: Original analysis report  
+- `Yuting_34264353_Assignment3`: Original assignment code  
 - `README.md`: This documentation file
 
